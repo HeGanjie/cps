@@ -21,10 +21,19 @@
     (eval `(def ~s ~(cps-prim (eval sym))))
     s))
 
+(defn call? [exp]
+  (and (seq? exp)
+       (-> exp first fn??)))
+
 (defn cps [exp callback]
   (match exp
          ([(f-sym :guard fn??) & args] :seq)
-         (concat
-           (cons (gen-cps-prim f-sym) args) [callback])
+         (if (not-any? call? args)
+           `(~(gen-cps-prim f-sym) ~@args ~callback)
+           (let [newSym (gensym)
+                 preEval (first (filter call? args))
+                 vargs (vec args)
+                 newExp (assoc vargs (.indexOf vargs preEval) newSym)]
+             (cps preEval `(fn [~newSym] ~(cps (cons f-sym newExp) callback)))))
          :else exp))
 
