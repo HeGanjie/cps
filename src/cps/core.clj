@@ -35,5 +35,10 @@
                  vargs (vec args)
                  newExp (assoc vargs (.indexOf vargs preEval) newSym)]
              (cps preEval `(fn [~newSym] ~(cps (cons f-sym newExp) callback)))))
-         :else exp))
+         ([(if-sym :guard #(= 'if %)) test trueExp & rest] :seq)
+         (if (call? test)
+           (let [newSym (gensym)]
+             (cps test `(fn [~newSym] (if ~newSym ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))))
+           `(if ~test ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))
+         :else `(~callback ~exp)))
 
