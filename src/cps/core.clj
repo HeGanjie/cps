@@ -30,12 +30,7 @@
     (eval `(def ~s ~(cps-prim (eval sym))))
     s))
 
-; cps for lambda
-(defn cps-fn [exp]
-  (match exp
-         (['fn (args :guard vector?) body] :seq)
-         (let [callback (gensym)]
-           `(fn ~(conj args callback) ~(cps body callback)))))
+; TODO implement first class lambda args cps transform: (f (fn [n] ...) ...) -> (f (fn [n k] ...) ...)
 
 (defn cps [exp callback]
   (match exp
@@ -61,4 +56,11 @@
              (cps test `(fn [~newSym] (if ~newSym ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))))
            `(if ~test ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))
          :else `(~callback ~exp)))
+
+; cps for lambda
+(defn cps-fn [exp]
+  (match exp
+         (['fn (args :guard vector?) body] :seq)
+         (let [callback (gensym)]
+           `(fn ~(conj args callback) ~(cps body callback)))))
 
