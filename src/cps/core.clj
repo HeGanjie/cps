@@ -30,8 +30,9 @@
     (eval `(def ~s ~(cps-prim (eval sym))))
     s))
 
-; TODO implement first class lambda args cps transform: (f (fn [n] ...) ...) -> (f (fn [n k] ...) ...)
+(declare cps-fn)
 
+; TODO implement first class lambda args cps transform: (f (fn [n] ...) ...) -> (f (fn [n k] ...) ...)
 (defn cps [exp callback]
   (match exp
          ([(f-sym :guard fn??) & args] :seq)                ; call

@@ -1,0 +1,32 @@
+(call/cc (fn [return] 2)) ; 2
+(call/cc (fn [return] (return 1))) ; 1
+(call/cc (fn [return] (return 1) 2)) ; 1
+(call/cc (fn [return] (do (return 1) 2))) ; 1
+
+(call/cc& (fn [return k] (k 2)) halt) ; 2
+(call/cc& (fn [return k] (return& 1 k)) halt) ; 1
+(call/cc& (fn [return k] (return& 1 (fu [rk]
+										(do& rk 2 k)))) halt) ; 1
+
+(defn call/cc& [f k]
+  (f k k))
+
+(defn halt& [v k]
+	(println "=> " v)
+	(println "> "))
+
+
+(map (fn [e] (+ e 1)) [0 1 2 3])
+
+(map& (fn [e k] (+& e 1 k)) [0 1 2 3] k)
+
+(fn [f coll]
+  (cons (f (first coll)) (map f (rest coll))))
+
+(fn [f& coll k]
+  (first& coll (fn [head]
+          (f& head (fn [mh]
+                (rest& coll (fn [r]
+                        (map& f& r (fn [mr]
+                              (cons& mh mr k))))))))))
+
