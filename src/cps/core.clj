@@ -28,43 +28,44 @@
         (= `fn* head)))))
 
 (defn call? [exp]
-  (when (seq? exp)
-    (let [head (first exp)]
-      (or
-        (fn?? head)
-        (lambda? head)))))
+  (and (seq? exp) (not (lambda? exp))))
 
 ; cps for primitive func
 (defn gen-cps-prim [sym]
-  (let [s (symbol (str sym '&))]
-    (when-not (s (.getMappings *ns*))
-      (eval `(def ~s ~(cps-prim (eval sym)))))
-    s))
+  (if-not (sym (.getMappings *ns*))                         ; symbol maybe in lambda scope, handle lazily
+    `(cps-prim ~sym)
+    (let [s (symbol (str sym '&))]
+      (when-not (s (.getMappings *ns*))
+        (eval `(def ~s ~(cps-prim (eval sym)))))
+      s)))
 
 (declare cps-fn)
 
-; TODO implement first class lambda args cps transform: (f (fn [n] ...) ...) -> (f (fn [n k] ...) ...)
 (defn cps [exp callback]
   (let [exp (macroexpand-all exp)
+        transformFnArgs (fn [coll] (map #(if (lambda? %) (cps-fn %) %) coll))
         handleCall (fn [handler f args]
                      (if (not-any? call? args)
-                       `(~(handler f) ~@args ~callback)
+                       `(~(handler f) ~@(transformFnArgs args) ~callback)
                        (let [newSym (gensym)
                              preEval (first (filter call? args))
                              vargs (vec args)
                              newExp (assoc vargs (.indexOf vargs preEval) newSym)]
                          (cps preEval `(fn [~newSym] ~(cps (cons f newExp) callback))))))]
     (match exp
-           ([(f-sym :guard fn??) & args] :seq)              ; call
-           (handleCall gen-cps-prim f-sym args)
-           ([(fn-exp :guard lambda?) & args] :seq)          ; ((fn [] ...) ...)
-           (handleCall cps-fn fn-exp args)
+           (exp :guard #(not (seq? %))) `(~callback ~exp)
            (['if test trueExp & rest] :seq)                 ; if
            (if (call? test)
              (let [newSym (gensym)]
                (cps test `(fn [~newSym] (if ~newSym ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))))
              `(if ~test ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))
-           :else `(~callback ~exp))))
+           ([(fn-exp :guard lambda?) & args] :seq)          ; ((fn [] ...) ...)
+           (handleCall cps-fn fn-exp args)
+           ([f-sym & args] :seq)                            ; call
+           (handleCall gen-cps-prim f-sym args)
+           )))
+
+(defn fndo [& rest] (last rest))
 
 ; cps for lambda
 (defn cps-fn [exp]
@@ -76,13 +77,17 @@
            :else (throw (Exception. (println-str "Can't match: " exp))))))
 
 (defn callcc& [f k]
-  (f k k))
+  (let [calledFlag (atom nil)
+        rtnVal (f #(do (reset! calledFlag true) (k %)) identity)]
+    (if @calledFlag
+      rtnVal
+      (k rtnVal))))
 
 (defn callcc [f]
   (throw (Exception. "I should not execute!")))
 
 (defmacro shift [k exp]
-  `(callcc (fn [~k] ~exp)))
+  `(~'callcc (fn [~k] ~exp)))
 
 (defmacro reset [exp]
   (cps exp 'identity))
