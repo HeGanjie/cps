@@ -36,7 +36,7 @@
     `(cps-prim ~sym)
     (let [s (symbol (str sym '&))]
       (when-not (s (.getMappings *ns*))
-        (eval `(def ~s ~(cps-prim (eval sym)))))
+        (eval `(def ~s (cps-prim ~sym))))
       s)))
 
 (declare cps-fn)
