@@ -44,9 +44,12 @@
 (defn cps [exp callback]
   (let [exp (macroexpand-all exp)
         transformFnArgs (fn [coll] (map #(if (lambda? %) (cps-fn %) %) coll))
-        handleCall (fn [handler f args]
+        handleCall (fn [f args]
                      (if (not-any? call? args)
-                       `(~(handler f) ~@(transformFnArgs args) ~callback)
+                       (let [handler (if (lambda? f)
+                                       cps-fn
+                                       gen-cps-prim)]
+                         `(~(handler f) ~@(transformFnArgs args) ~callback))
                        (let [newSym (gensym)
                              preEval (first (filter call? args))
                              vargs (vec args)
@@ -57,12 +60,14 @@
            (['if test trueExp & rest] :seq)                 ; if
            (if (call? test)
              (let [newSym (gensym)]
-               (cps test `(fn [~newSym] (if ~newSym ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))))
+               (cps test `(fn [~newSym] (if ~newSym
+                                          ~(cps trueExp callback)
+                                          ~(if rest (cps (first rest) callback))))))
              `(if ~test ~(cps trueExp callback) ~(if rest (cps (first rest) callback))))
-           ([(fn-exp :guard lambda?) & args] :seq)          ; ((fn [] ...) ...)
-           (handleCall cps-fn fn-exp args)
+           (['fn* ([(args :guard vector?) body] :seq)] :seq) ; (fn [] ...)
+           `(~callback ~(cps-fn exp))
            ([f-sym & args] :seq)                            ; call
-           (handleCall gen-cps-prim f-sym args)
+           (handleCall f-sym args)
            )))
 
 (defn fndo [& rest] (last rest))
