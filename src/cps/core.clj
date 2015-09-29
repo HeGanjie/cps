@@ -45,18 +45,17 @@
   (let [exp (macroexpand-all exp)
         transformFnArgs (fn [coll] (map #(if (lambda? %) (cps-fn %) %) coll))
         handleCall (fn [f args]
-                     (if (not-any? call? args)
+                     (if (not-any? call? exp)
                        (let [handler (if (lambda? f)
                                        cps-fn
                                        gen-cps-prim)]
                          `(~(handler f) ~@(transformFnArgs args) ~callback))
                        (let [newSym (gensym)
-                             preEval (first (filter call? args))
-                             vargs (vec args)
-                             newExp (assoc vargs (.indexOf vargs preEval) newSym)]
-                         (cps preEval `(fn [~newSym] ~(cps (cons f newExp) callback))))))]
+                             [front [preEval & rest]] (split-with (complement call?) exp)
+                             newExp `(~@front ~newSym ~@rest)]
+                         (cps preEval `(fn [~newSym] ~(cps newExp callback))))))]
     (match exp
-           (exp :guard #(not (seq? %))) `(~callback ~exp)
+           (exp :guard #(not (seq? %))) `(~callback ~exp)   ; var
            (['if test trueExp & rest] :seq)                 ; if
            (if (call? test)
              (let [newSym (gensym)]
