@@ -56,6 +56,7 @@
                          (cps preEval `(fn [~newSym] ~(cps newExp callback))))))]
     (match exp
            (exp :guard #(not (seq? %))) `(~callback ~exp)   ; var
+           (['quote x] :seq) `(~callback ~exp)              ; quote
            (['if test trueExp & rest] :seq)                 ; if
            (if (seq? test)
              (let [newSym (gensym)]
