@@ -96,4 +96,8 @@
 (defmacro reset [exp]
   (cps exp 'identity))
 
-; abnormal for callcc, but seems to ok in Delimited continuation : (macroexpand '(reset (+ 1 (shift k (fndo (k 3) 2)))))
+; (reset (+ 1 (shift k (k 2)))) => 3
+
+; abnormal for callcc, but seems to ok in Delimited continuation:
+; (reset (+ 1 (shift k (fndo (k 3) 2)))) => 2 (should be 4)
+
