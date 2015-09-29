@@ -57,7 +57,7 @@
     (match exp
            (exp :guard #(not (seq? %))) `(~callback ~exp)   ; var
            (['if test trueExp & rest] :seq)                 ; if
-           (if (call? test)
+           (if (seq? test)
              (let [newSym (gensym)]
                (cps test `(fn [~newSym] (if ~newSym
                                           ~(cps trueExp callback)
