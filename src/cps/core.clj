@@ -32,8 +32,10 @@
 
 ; cps for primitive func
 (defn gen-cps-prim [sym]
-  (if-not (sym (.getMappings *ns*))                         ; symbol maybe in lambda scope, handle lazily
-    `(cps-prim ~sym)
+  (if-not (sym (.getMappings *ns*))
+    (if (namespace sym)
+      `(cps-prim ~sym)                                      ; evaled + - * / ...
+      sym)                                                  ; (fn [f] (f ..))
     (let [s (symbol (str sym '&))]
       (when-not (s (.getMappings *ns*))
         (eval `(def ~s (cps-prim ~sym))))
@@ -43,12 +45,11 @@
 
 (defn cps [exp callback]
   (let [exp (macroexpand-all exp)
-        transformFnArgs (fn [coll] (map #(if (lambda? %) (cps-fn %) %) coll))
+        transformFnArgs (fn [coll] (map #(if (lambda? %) (cps-fn %)
+                                                         (if (symbol? %) (gen-cps-prim %) %)) coll))
         handleCall (fn [f args]
                      (if (not-any? call? exp)
-                       (let [handler (if (lambda? f)
-                                       cps-fn
-                                       gen-cps-prim)]
+                       (let [handler (if (lambda? f) cps-fn gen-cps-prim)]
                          `(~(handler f) ~@(transformFnArgs args) ~callback))
                        (let [newSym (gensym)
                              [front [preEval & rest]] (split-with (complement call?) exp)
@@ -100,8 +101,10 @@
 
 (defmacro defgenerator
   [name param & body]
-  `(defn ~name ~param
-     (reset (fndo ~@body))))
+  (if (next body)
+    `(defn ~name ~param
+       (reset (fndo ~@body)))
+    `(defn ~name ~param (reset ~@body))))
 
 (defmacro yield [x]
   `(shift cc# {:value ~x :next (fn [] (cc# nil))}))
@@ -115,3 +118,36 @@
   (lazy-seq
     (when g
       (cons (:value g) (gen2seq ((:next g)))))))
+
+#_
+(defn Y [g]
+  (let [a (fn [F]
+            (g
+              (fn [& args] (apply (F F) args))))]
+    (a a)))
+
+(defmacro fnlet [[k v & kvp] body]
+  (if-not kvp
+    `((fn [~k] ~body) ~v)
+    `((fn [~k] (fnlet ~kvp ~body)) ~v)))
+
+#_
+(defn fnloop [from to f looper]
+  (if (not= from to)
+    (fndo
+      (looper from)
+      (fnloop (f from) to f looper))))
+
+(defgenerator gen [n]
+              (fnlet [Yc (fn [g]
+                           (fnlet [h (fn [F]
+                                       (g (fn [a b c d] ((F F) a b c d))))]
+                                  (h h)))
+                      fnloop (Yc (fn [recu]
+                                  (fn [from to f looper]
+                                    (if (not= from to)
+                                      (fndo
+                                        (looper from)
+                                        (recu (f from) to f looper))))))]
+                     (fnloop 0 n inc (fn [i] (yield i)))))
+
