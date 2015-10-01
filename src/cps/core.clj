@@ -110,3 +110,8 @@
                 (yield 0)
                 (yield 1)
                 (yield 2))
+
+(defn gen2seq [g]
+  (lazy-seq
+    (when g
+      (cons (:value g) (gen2seq ((:next g)))))))
