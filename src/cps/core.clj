@@ -81,18 +81,14 @@
              `(fn ~(conj args callback) ~(cps body callback)))
            :else (throw (Exception. (println-str "Can't match: " exp))))))
 
-(defn callcc& [f k]
-  (let [calledFlag (atom nil)
-        rtnVal (f #(do (reset! calledFlag true) (k %)) identity)]
-    (if @calledFlag
-      rtnVal
-      (k rtnVal))))
+(defn callcc& [f& cc]
+  (f& cc identity))
 
 (defn callcc [f]
   (throw (Exception. "I should not execute!")))
 
-(defmacro shift [k exp]
-  `(~'callcc (fn [~k] ~exp)))
+(defmacro shift [cc exp]
+  `(~'callcc (fn [~cc] ~exp)))
 
 (defmacro reset [exp]
   (cps exp 'identity))
@@ -102,3 +98,15 @@
 ; abnormal for callcc, but seems to ok in Delimited continuation:
 ; (reset (+ 1 (shift k (fndo (k 3) 2)))) => 2 (should be 4)
 
+(defmacro defgenerator
+  [name param & body]
+  `(defn ~name ~param
+     (reset (fndo ~@body))))
+
+(defmacro yield [x]
+  `(shift cc# {:value ~x :next (fn [] (cc# nil))}))
+
+#_(defgenerator gen ()
+                (yield 0)
+                (yield 1)
+                (yield 2))
