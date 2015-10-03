@@ -73,6 +73,11 @@
 
 (defn fndo [& rest] (last rest))
 
+(defmacro fnlet [[k v & kvp] body]
+  (if-not kvp
+    `((fn [~k] ~body) ~v)
+    `((fn [~k] (fnlet ~kvp ~body)) ~v)))
+
 ; cps for lambda
 (defn cps-fn [exp]
   (let [exp (macroexpand-all exp)]
@@ -109,34 +114,52 @@
 (defmacro yield [x]
   `(shift cc# {:value ~x :next (fn [] (cc# nil))}))
 
-#_(defgenerator gen ()
+(defmacro yield* [g]
+  `(shift cc# (yield-all ~g cc#)))
+
+(defn yield-all [ge next-cc]
+  (reset
+    (fnlet [Yc (fn [g]
+                 (fnlet [h (fn [F]
+                             (g (fn [a] ((F F) a))))]
+                        (h h)))
+            looper (Yc (fn [recu]
+                         (fn [g]
+                           (if g
+                             (fndo
+                               (shift cc1# {:value (:value g)
+                                            :next  (fn [] (cc1# nil))})
+                               (recu (apply (get g :next) [])))))))]
+           (fndo
+             (looper ge)
+             (apply next-cc [nil])))))
+
+#_(defgenerator gen []
                 (yield 0)
                 (yield 1)
                 (yield 2))
+#_
+(defgenerator gen1 []
+              (yield 3)
+              (yield* (gen))
+              (yield 4))
 
 (defn gen2seq [g]
   (lazy-seq
     (when g
       (cons (:value g) (gen2seq ((:next g)))))))
 
-#_
-(defn Y [g]
-  (let [a (fn [F]
-            (g
-              (fn [& args] (apply (F F) args))))]
-    (a a)))
+#_(defn Y [g]
+    (let [a (fn [F]
+              (g
+                (fn [& args] (apply (F F) args))))]
+      (a a)))
 
-(defmacro fnlet [[k v & kvp] body]
-  (if-not kvp
-    `((fn [~k] ~body) ~v)
-    `((fn [~k] (fnlet ~kvp ~body)) ~v)))
-
-#_
-(defn fnloop [from to f looper]
-  (if (not= from to)
-    (fndo
-      (looper from)
-      (fnloop (f from) to f looper))))
+#_(defn fnloop [from to f looper]
+    (if (not= from to)
+      (fndo
+        (looper from)
+        (fnloop (f from) to f looper))))
 
 (defgenerator gen [n]
               (fnlet [Yc (fn [g]
@@ -144,10 +167,19 @@
                                        (g (fn [a b c d] ((F F) a b c d))))]
                                   (h h)))
                       fnloop (Yc (fn [recu]
-                                  (fn [from to f looper]
-                                    (if (not= from to)
-                                      (fndo
-                                        (looper from)
-                                        (recu (f from) to f looper))))))]
+                                   (fn [from to f looper]
+                                     (if (not= from to)
+                                       (fndo
+                                         (looper from)
+                                         (recu (f from) to f looper))))))]
                      (fnloop 0 n inc (fn [i] (yield i)))))
 
+#_(cps '(+ 4 (callcc (fn [cc] (cc 3))) (+ 1 (- 3 1))) 'identity)
+#_(let [callback identity
+        a (fn [x]
+            (fn [y] (callback (+ 4 x y))))
+        b (a (callcc (fn [callback]
+                       (fn [cc] (callback (cc 3))))))
+        c (fn [z] (b (+ 1 z)))
+        d (c (- 3 1))]
+    d)
