@@ -174,12 +174,14 @@
                                          (recu (f from) to f looper))))))]
                      (fnloop 0 n inc (fn [i] (yield i)))))
 
-#_(cps '(+ 4 (callcc (fn [cc] (cc 3))) (+ 1 (- 3 1))) 'identity)
+#_(cps-anf '(+ 4 (callcc (fn [cc] (cc 3))) (+ 1 (- 3 1))) 'identity)
 #_(let [callback identity
-        a (fn [x]
-            (fn [y] (callback (+ 4 x y))))
-        b (a (callcc (fn [callback]
+        a (fn [x y] (callback (+ 4 x y)))
+        b (fn [z]
+            (let [o (fn [j] (a z j))
+                  n (fn [i] (o (+ 1 i)))
+                  m (n (- 3 1))] m))
+        c (b (callcc (fn [callback]
                        (fn [cc] (callback (cc 3))))))
-        c (fn [z] (b (+ 1 z)))
-        d (c (- 3 1))]
-    d)
+        ]
+    c)
